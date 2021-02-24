@@ -1,0 +1,19 @@
+<html>
+
+<head>
+    <title>puzzlegen</title>
+</head>
+
+<body>
+    <h1>puzzlegen</h1>
+    <ul>
+        {{ range . }}
+        <li>{{.}}</li>
+        {{ end }}
+    </ul>
+    <form action="/create" method="post">
+        <input type="submit" name="create" value="create" />
+    </form>
+</body>
+
+</html>
