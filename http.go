@@ -1,22 +1,33 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 )
 
-type roomFunc func(w http.ResponseWriter, r *http.Request, room *room)
+type roomFunc func(rm *room, w http.ResponseWriter, r *http.Request)
+type createFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request)
 
-func (s *state) createRoom(w http.ResponseWriter, r *http.Request) {
-	rm := &room{
-		pz: puzzle{50, 20},
-	}
-	id := s.create(rm)
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
 
-	http.Redirect(w, r, fmt.Sprintf("/room/%s", id), http.StatusFound)
+func (s *state) createRoom(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	rm := s.create(ctx)
+
+	http.Redirect(w, r, fmt.Sprintf("/room/%s", rm.id), http.StatusFound)
+}
+
+func (s *state) NeedsAContext(ctx context.Context, cf createFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cf(ctx, w, r)
+	})
 }
 
 func (s *state) NeedsARoom(rf roomFunc) http.Handler {
@@ -31,30 +42,32 @@ func (s *state) NeedsARoom(rf roomFunc) http.Handler {
 			http.Error(w, "room not found", http.StatusNotFound)
 			return
 		}
-		rf(w, r, room)
+		rf(room, w, r)
 	})
 }
 
-func handleRoom(w http.ResponseWriter, r *http.Request, rm *room) {
+func handleRoom(rm *room, w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Puzzle with dimensions %d x %d", rm.pz.width, rm.pz.height)
 }
 
-func handleRoomWS(w http.ResponseWriter, r *http.Request, rm *room) {
-	wsc, err := upgrader.Upgrade(w, r, nil)
+func handleRoomWS(rm *room, w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
 		http.Error(w, "could not upgrade connection", http.StatusInternalServerError)
 		return
 	}
+	recv := rm.request()
+	go func() {
+		for msg := range recv {
+			conn.WriteMessage(websocket.TextMessage, []byte(msg))
+		}
+	}()
 	for {
-		t, p, err := wsc.ReadMessage()
+		_, p, err := conn.ReadMessage()
 		if err != nil {
 			log.Println(err)
-			return
 		}
-		if err := wsc.WriteMessage(t, p); err != nil {
-			log.Println(err)
-			return
-		}
+		rm.in <- string(p)
 	}
 }

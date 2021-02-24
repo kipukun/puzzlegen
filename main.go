@@ -1,41 +1,80 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"html/template"
 	"math/rand"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/gorilla/websocket"
 )
-
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
 
 // a room is a hub for clients.
 // the room manages communication between clients.
 type room struct {
-	pz puzzle
+	id   string
+	pz   puzzle
+	in   chan string
+	outs []chan string
+	mu   sync.RWMutex
+}
+
+func (r *room) request() <-chan string {
+	out := make(chan string, 1)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.outs = append(r.outs, out)
+	return out
+}
+
+func (r *room) close() {
+	r.mu.RLock()
+	for _, out := range r.outs {
+		close(out)
+	}
+	r.mu.RUnlock()
+}
+
+func (r *room) broadcast(ctx context.Context) {
+	for {
+		select {
+		case msg := <-r.in:
+			r.mu.RLock()
+			for _, out := range r.outs {
+				out <- msg
+			}
+			r.mu.RUnlock()
+		case <-ctx.Done():
+			r.close()
+			return
+		}
+	}
 }
 
 type state struct {
 	srv   *http.Server
 	rooms map[string]*room
 	mu    sync.RWMutex
-	done  <-chan bool
 }
 
-func (s *state) create(r *room) string {
+func (s *state) create(ctx context.Context) *room {
+	r := new(room)
+	r.in = make(chan string)
+	r.pz = puzzle{50, 20}
 	i := id()
+	r.id = i
 	s.mu.Lock()
 	s.rooms[i] = r
 	s.mu.Unlock()
 
-	return i
+	go r.broadcast(ctx)
+
+	return r
 }
 
 func (s *state) get(id string) *room {
@@ -65,7 +104,10 @@ func main() {
 		}
 
 	})
-	r.HandleFunc("/create", s.createRoom).Methods("POST")
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	r.Handle("/create", s.NeedsAContext(ctx, s.createRoom)).Methods("POST")
 
 	rooms := r.PathPrefix("/room").Subrouter()
 	rooms.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -79,5 +121,11 @@ func main() {
 		Addr:    "127.0.0.1:8080",
 		Handler: r,
 	}
+	go func() {
+		<-ctx.Done()
+		fmt.Println("got interrupt, stopping server and closing rooms...")
+		stop()
+		s.srv.Close()
+	}()
 	s.srv.ListenAndServe()
 }
