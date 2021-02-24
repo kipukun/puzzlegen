@@ -4,6 +4,9 @@
     </head>
     <body>
         <h1>room {{.Name}}</h1>
+        <canvas id="puzzle" width="200" height="100" style="border: 1px solid #000;">
+            
+        </canvas>
         
         <script type="text/javascript">
             var wsURI = window.location.href.replace("http", "ws") + "/relay"
@@ -14,5 +17,10 @@
             window.addEventListener("mousedown", function(e) {
                 ws.send(String(e.clientX) + " " + String(e.clientY))
             })
+            var c = document.getElementById("puzzle")
+            var ctx = c.getContext("2d")
+            ctx.moveTo(0,0)
+            ctx.lineTo(200, 100)
+            ctx.stroke()
         </script>
 </html>
