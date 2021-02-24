@@ -20,16 +20,23 @@ type room struct {
 	id   string
 	pz   puzzle
 	in   chan string
-	outs []chan string
+	outs map[string]chan string
 	mu   sync.RWMutex
 }
 
-func (r *room) request() <-chan string {
+func (r *room) request() (string, <-chan string) {
 	out := make(chan string, 1)
+	id := id()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.outs = append(r.outs, out)
-	return out
+	r.outs[id] = out
+	return id, out
+}
+
+func (r *room) done(i string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.outs, i)
 }
 
 func (r *room) close() {
@@ -65,6 +72,7 @@ type state struct {
 func (s *state) create(ctx context.Context) *room {
 	r := new(room)
 	r.in = make(chan string)
+	r.outs = make(map[string]chan string)
 	r.pz = puzzle{50, 20}
 	i := id()
 	r.id = i
@@ -92,7 +100,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ps := pieces{piece{0, 0}, piece{0, 1}, piece{1, 0}}
-		tmpl, err := template.ParseFiles("main.html")
+		tmpl, err := template.ParseFiles("static/main.html")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusTeapot)
 			return

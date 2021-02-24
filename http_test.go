@@ -22,7 +22,7 @@ func (trws *testRoomWS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestHandleRoomWs(t *testing.T) {
-	num := 10
+	num := 50
 	s := new(state)
 	s.rooms = make(map[string]*room)
 

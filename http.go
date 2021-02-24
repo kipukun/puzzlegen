@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 
@@ -47,7 +48,21 @@ func (s *state) NeedsARoom(rf roomFunc) http.Handler {
 }
 
 func handleRoom(rm *room, w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Puzzle with dimensions %d x %d", rm.pz.width, rm.pz.height)
+	tmpl, err := template.ParseFiles("static/room.html")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusTeapot)
+		return
+	}
+	d := struct {
+		Name string
+	}{
+		rm.id,
+	}
+	err = tmpl.Execute(w, d)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusTeapot)
+		return
+	}
 }
 
 func handleRoomWS(rm *room, w http.ResponseWriter, r *http.Request) {
@@ -57,16 +72,29 @@ func handleRoomWS(rm *room, w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "could not upgrade connection", http.StatusInternalServerError)
 		return
 	}
-	recv := rm.request()
+	id, recv := rm.request()
+	done := make(chan struct{}, 1)
 	go func() {
-		for msg := range recv {
-			conn.WriteMessage(websocket.TextMessage, []byte(msg))
+		for {
+			select {
+			case msg := <-recv:
+				conn.WriteMessage(websocket.TextMessage, []byte(msg))
+			case <-done:
+				log.Println("got done!")
+				rm.done(id)
+				return
+			}
 		}
 	}()
 	for {
 		_, p, err := conn.ReadMessage()
 		if err != nil {
-			log.Println(err)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
+				log.Printf("error: %v, user-agent: %v", err, r.Header.Get("User-Agent"))
+			}
+			fmt.Println("done with err:", err)
+			done <- struct{}{}
+			return
 		}
 		rm.in <- string(p)
 	}
