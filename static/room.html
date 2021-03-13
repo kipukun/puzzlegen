@@ -1,26 +1,21 @@
 <html>
-    <head>
-        <title>room {{.Name}}</title>
-    </head>
-    <body>
-        <h1>room {{.Name}}</h1>
-        <canvas id="puzzle" width="200" height="100" style="border: 1px solid #000;">
-            
-        </canvas>
-        
-        <script type="text/javascript">
-            var wsURI = window.location.href.replace("http", "ws") + "/relay"
-            var ws = new WebSocket(wsURI)
-            ws.onmessage = function(e) {
-                console.log(e.data)
-            }
-            window.addEventListener("mousedown", function(e) {
-                ws.send(String(e.clientX) + " " + String(e.clientY))
-            })
-            var c = document.getElementById("puzzle")
-            var ctx = c.getContext("2d")
-            ctx.moveTo(0,0)
-            ctx.lineTo(200, 100)
-            ctx.stroke()
-        </script>
+
+<head>
+    <title>room {{.Name}}</title>
+    <style>
+        .gallery {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>room {{.Name}}</h1>
+    <p>Puzzle is {{.X}} x {{.Y}} pieces</p>
+    <div id="c" style="border: 1px solid #000; width: 500; height: 400">
+    </div>
+
+    <script src="https://unpkg.com/konva@3.1.0/konva.js"></script>
+    <script type="text/javascript" src="../public/room.js"></script>
+
 </html>

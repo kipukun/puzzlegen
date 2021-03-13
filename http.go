@@ -1,11 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"image/jpeg"
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
 	"log"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -15,12 +23,28 @@ type roomFunc func(rm *room, w http.ResponseWriter, r *http.Request)
 type createFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request)
 
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
+	ReadBufferSize:    1024,
+	WriteBufferSize:   1024,
+	EnableCompression: true,
 }
 
 func (s *state) createRoom(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	rm := s.create(ctx)
+	r.ParseMultipartForm(10 << 20) // 10MB
+	f, _, err := r.FormFile("file")
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "could not parse your file", http.StatusInternalServerError)
+		return
+	}
+
+	g, err := newGame(f, 100)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	f.Close()
+
+	rm := s.create(ctx, g)
 
 	http.Redirect(w, r, fmt.Sprintf("/room/%s", rm.id), http.StatusFound)
 }
@@ -55,14 +79,47 @@ func handleRoom(rm *room, w http.ResponseWriter, r *http.Request) {
 	}
 	d := struct {
 		Name string
+		X, Y int
 	}{
 		rm.id,
+		rm.g.nX, rm.g.nY,
 	}
 	err = tmpl.Execute(w, d)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusTeapot)
 		return
 	}
+}
+
+func handleGameInfo(rm *room, w http.ResponseWriter, r *http.Request) {
+	b, err := json.Marshal(rm.g)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	w.Write(b)
+}
+
+func handleGetImage(rm *room, w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "max-age:290304000, public")
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Last-Modified", time.Now().Format(http.TimeFormat))
+	var b bytes.Buffer
+	vars := mux.Vars(r)
+	x, _ := strconv.Atoi(vars["x"])
+	y, _ := strconv.Atoi(vars["y"])
+
+	img, err := rm.g.imageAt(x, y)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	err = jpeg.Encode(&b, img, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	io.Copy(w, &b)
 }
 
 func handleRoomWS(rm *room, w http.ResponseWriter, r *http.Request) {

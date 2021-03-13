@@ -12,18 +12,9 @@ const (
 	triangle
 )
 
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
 // a chain is the set of pieces that have fit together.
-// chains can add themselves to other chains, and return their pieces.
 type chain interface {
-	// add returns a slice of pieces with chain added to c.
-	add(c chain) pieces
+	fits(c chain) bool
 	pieces() pieces
 }
 
@@ -39,16 +30,6 @@ func (p piece) fits(t piece) bool {
 	return (x || y) && !(x && y) // XOR
 }
 
-func (p piece) add(c chain) pieces {
-	ps := c.pieces()
-	for _, t := range ps {
-		if p.fits(t) {
-			return append(ps, p)
-		}
-	}
-	return ps
-}
-
 func (p piece) pieces() pieces {
 	return []piece{p}
 }
@@ -59,26 +40,16 @@ func (p piece) String() string {
 
 type pieces []piece
 
-func (ps pieces) add(c chain) pieces {
+func (ps pieces) fits(c chain) bool {
 	tps := c.pieces()
 	for _, p := range ps {
 		for _, t := range tps {
 			if p.fits(t) {
-				return append(tps, ps...)
+				return true
 			}
 		}
 	}
-	return tps
+	return false
 }
 
 func (ps pieces) pieces() pieces { return ps }
-
-// a puzzle represents a configured puzzle, with a
-// width and height.
-type puzzle struct {
-	width, height int
-}
-
-func (pz *puzzle) solvedBy(c chain) bool {
-	return len(c.pieces()) == pz.height*pz.width
-}

@@ -6,12 +6,10 @@
 
 <body>
     <h1>puzzlegen</h1>
-    <ul>
-        {{ range . }}
-        <li>{{.}}</li>
-        {{ end }}
-    </ul>
-    <form action="/create" method="post">
+    <form enctype="multipart/form-data" action="/create" method="post">
+        <label for="numpieces">Number of pieces</label>
+        <input type="number" name="numpieces" id="numpieces">
+        <input type="file" name="file" id="file">
         <input type="submit" name="create" value="create" />
     </form>
 </body>

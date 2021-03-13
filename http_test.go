@@ -29,7 +29,7 @@ func TestHandleRoomWs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	r := s.create(ctx)
+	r := s.create(ctx, nil)
 	ts := httptest.NewServer(&testRoomWS{
 		r: r,
 	})

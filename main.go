@@ -18,7 +18,7 @@ import (
 // the room manages communication between clients.
 type room struct {
 	id   string
-	pz   puzzle
+	g    *game
 	in   chan string
 	outs map[string]chan string
 	mu   sync.RWMutex
@@ -69,11 +69,11 @@ type state struct {
 	mu    sync.RWMutex
 }
 
-func (s *state) create(ctx context.Context) *room {
+func (s *state) create(ctx context.Context, g *game) *room {
 	r := new(room)
 	r.in = make(chan string)
 	r.outs = make(map[string]chan string)
-	r.pz = puzzle{50, 20}
+	r.g = g
 	i := id()
 	r.id = i
 	s.mu.Lock()
@@ -99,19 +99,19 @@ func main() {
 
 	r := mux.NewRouter()
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		ps := pieces{piece{0, 0}, piece{0, 1}, piece{1, 0}}
 		tmpl, err := template.ParseFiles("static/main.html")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusTeapot)
 			return
 		}
-		err = tmpl.Execute(w, ps)
+		err = tmpl.Execute(w, nil)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusTeapot)
 			return
 		}
 
 	})
+	r.PathPrefix("/public/").Handler(http.StripPrefix("/public/", http.FileServer(http.Dir("./public/"))))
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -124,6 +124,11 @@ func main() {
 
 	rooms.Handle("/{id}", s.NeedsARoom(handleRoom))
 	rooms.Handle("/{id}/relay", s.NeedsARoom(handleRoomWS))
+	rooms.Handle("/{id}/info", s.NeedsARoom(handleGameInfo))
+	rooms.Handle("/{id}/img/{x}/{y}", s.NeedsARoom(handleGetImage))
+	rooms.HandleFunc("/main.js", func(rw http.ResponseWriter, r *http.Request) {
+		http.ServeFile(rw, r, "static/main.js")
+	})
 
 	s.srv = &http.Server{
 		Addr:    "127.0.0.1:8080",

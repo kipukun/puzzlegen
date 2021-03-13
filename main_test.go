@@ -14,7 +14,7 @@ func TestCreateRoom(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		t.Run(fmt.Sprintf("create #%d", i), func(t *testing.T) {
-			s.create(ctx)
+			s.create(ctx, nil)
 		})
 	}
 }
@@ -26,6 +26,6 @@ func BenchmarkCreateRoom(b *testing.B) {
 	defer cancel()
 
 	for i := 0; i < b.N; i++ {
-		s.create(ctx)
+		s.create(ctx, nil)
 	}
 }
